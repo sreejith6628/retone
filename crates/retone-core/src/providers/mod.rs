@@ -15,7 +15,7 @@ pub struct CompletionRequest { pub system: String, pub user: String, pub model: 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProviderStatus { Ready, NotInstalled, SignedOut, NoKey, Error(String) }
 
-#[derive(Debug, thiserror::Error, PartialEq)]
+#[derive(Debug, Clone, thiserror::Error, PartialEq)]
 pub enum ProviderError {
     #[error("not installed")] NotInstalled,
     #[error("signed out — sign in again")] SignedOut,
