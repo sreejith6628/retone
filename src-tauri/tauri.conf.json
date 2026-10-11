@@ -12,14 +12,27 @@
   "app": {
     "windows": [
       {
+        "label": "pill",
+        "url": "index.html",
         "title": "Retone",
-        "width": 800,
-        "height": 600
+        "width": 128,
+        "height": 30,
+        "x": 896,
+        "y": 8,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false,
+        "visible": false
       }
     ],
     "security": {
       "csp": null
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,
@@ -30,6 +43,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "shortDescription": "Rewrite selected text anywhere with your own AI subscription",
+    "category": "Productivity",
+    "copyright": "Copyright (c) 2026 Sreejith"
   }
 }

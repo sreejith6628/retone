@@ -19,7 +19,7 @@ impl ProviderId {
     pub fn label(self) -> &'static str {
         match self {
             ProviderId::ClaudeCli => "Claude (subscription)", ProviderId::CodexCli => "ChatGPT (subscription)",
-            ProviderId::GeminiCli => "Gemini (Google account)", ProviderId::Anthropic => "Anthropic API key",
+            ProviderId::GeminiCli => "Gemini CLI (API key / work accounts)", ProviderId::Anthropic => "Anthropic API key",
             ProviderId::OpenAi => "OpenAI API key", ProviderId::GeminiApi => "Gemini API key (free tier)",
             ProviderId::OpenRouter => "OpenRouter API key",
         }

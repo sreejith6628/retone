@@ -26,6 +26,13 @@ pub fn codex_result(mut out: crate::procutil::RunOutput, last_message: Option<St
     finish_cli(out)
 }
 
+/// `codex login status` prints its result on stderr (codex 0.162), so read both streams.
+pub fn codex_status_from(o: &crate::procutil::RunOutput) -> ProviderStatus {
+    if o.status == Some(0) && codex_logged_in(&format!("{}
+{}", o.stdout, o.stderr)) { ProviderStatus::Ready }
+    else { ProviderStatus::SignedOut }
+}
+
 pub fn codex_logged_in(status_stdout: &str) -> bool {
     let t = status_stdout.to_lowercase();
     t.contains("logged in") && !t.contains("not logged in")
@@ -49,8 +56,7 @@ impl Provider for CodexCli {
         let Some(exe) = self.exe() else { return ProviderStatus::NotInstalled };
         let Ok(job) = tempfile::tempdir() else { return ProviderStatus::Error("temp dir".into()) };
         match run(&exe, &["login".into(), "status".into()], "", job.path(), std::time::Duration::from_secs(15)).await {
-            Ok(o) if o.status == Some(0) && codex_logged_in(&o.stdout) => ProviderStatus::Ready,
-            Ok(_) => ProviderStatus::SignedOut,
+            Ok(o) => codex_status_from(&o),
             Err(e) => ProviderStatus::Error(e.to_string()),
         }
     }
@@ -76,6 +82,14 @@ sandbox: read-only"), None),
         assert_eq!(codex_result(ok("banner"), Some(" Hi team 
 ".into())), Ok("Hi team".into()));
         assert_eq!(codex_result(ok("banner"), Some("  ".into())), Err(ProviderError::EmptyOutput));
+    }
+    #[test]
+    fn login_status_read_from_stderr_too() {
+        let o = crate::procutil::RunOutput { status: Some(0), stdout: String::new(), stderr: "Logged in using ChatGPT
+".into() };
+        assert_eq!(codex_status_from(&o), ProviderStatus::Ready);
+        let o = crate::procutil::RunOutput { status: Some(1), stdout: String::new(), stderr: "Not logged in".into() };
+        assert_eq!(codex_status_from(&o), ProviderStatus::SignedOut);
     }
     #[test]
     fn login_status_requires_positive_phrase() {
