@@ -4,3 +4,4 @@ pub mod procutil;
 pub mod providers;
 pub mod settings;
 pub mod models;
+pub mod capture;
