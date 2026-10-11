@@ -1,0 +1,22 @@
+[package]
+name = "retone-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["process", "io-util", "time", "macros", "rt-multi-thread", "fs"] }
+which = "6"
+tempfile = "3"
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+dirs = "5"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+wiremock = "0.6"
