@@ -18,3 +18,10 @@ Status: `claude auth status` → JSON with `loggedIn`.
 - `--approval-mode plan` = read-only mode. **Never** `-y/--yolo` or `--approval-mode yolo`.
 - Tool exclusion: settings v2 key `tools.exclude` (array). Project settings (`<cwd>/.gemini/settings.json`) need a trusted workspace → pass `--skip-trust`.
 - Auth: OAuth creds under `~/.gemini/`; none present on owner's machine yet (sign-in in Task 10).
+
+## Curated model IDs (resources/models.json) — checked 2026-10-11
+- Claude CLI aliases: sonnet/haiku/opus (verified working in AHK tool). Anthropic API: claude-*-5-5 (current family).
+- Gemini CLI: IDs taken from the CLI 0.63.0 bundle (gemini-3-flash-preview, gemini-2.5-pro; default = CLI's own).
+- OpenAI: gpt-5.4-mini / gpt-5.4 / gpt-5-mini per developers.openai.com/api/docs/models/all. Not live-tested (no key).
+- Gemini API: gemini-3.6-flash per third-party sources (Google docs not checked directly). Not live-tested (no key).
+- Every provider also accepts a custom model ID.
