@@ -87,7 +87,9 @@ pub struct SaveResult { warnings: Vec<String> }
 pub fn save_settings(app: AppHandle, settings: Settings) -> Result<SaveResult, String> {
     if Tone::from_name(&settings.default_tone).is_none() { return Err("Unknown tone".into()); }
     provider_id(&settings.default_provider)?;
+    shortcuts::validate(&settings.shortcut_quick, &settings.shortcut_options)?;
     let st = app.state::<AppState>();
+    let previous = st.snapshot();
     let saved = st.update(|s| {
         let pos = s.pill_pos;
         let first = s.first_run_done;
@@ -95,7 +97,14 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> Result<SaveResult, S
         s.pill_pos = pos;            // owned by the pill, not the form
         s.first_run_done = first || s.first_run_done;
     }).map_err(|e| e.to_string())?;
-    let mut warnings = shortcuts::register(&app, &saved);
+    let failed = shortcuts::register(&app, &saved);
+    if !failed.is_empty() {
+        // Keep the user's working shortcuts rather than leaving them with none.
+        let _ = st.update(|s| { s.shortcut_quick = previous.shortcut_quick.clone(); s.shortcut_options = previous.shortcut_options.clone(); });
+        shortcuts::register(&app, &previous);
+        return Err(format!("{} — another app may be using it. Your previous shortcuts are still active.", failed.join("; ")));
+    }
+    let mut warnings = Vec::new();
     if saved.first_run_done { pill::show(&app, saved.show_pill); }
     if let Err(e) = apply_autostart(&app, saved.launch_at_login) { warnings.push(e); }
     Ok(SaveResult { warnings })

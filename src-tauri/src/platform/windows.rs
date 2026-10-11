@@ -135,14 +135,14 @@ unsafe extern "system" fn hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
                     }
                     if MOVED.load(SeqCst) {
                         SetWindowPos(pill(), HWND_TOPMOST, m.pt.x - DX.load(SeqCst), m.pt.y - DY.load(SeqCst), 0, 0,
-                                     SWP_NOSIZE | SWP_NOACTIVATE);
+                                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
                     }
                 }
                 WM_LBUTTONUP if DOWN.load(SeqCst) => {
                     DOWN.store(false, SeqCst);
                     if MOVED.load(SeqCst) {
                         let (x, y) = (m.pt.x - DX.load(SeqCst), m.pt.y - DY.load(SeqCst));
-                        SetWindowPos(pill(), HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                        SetWindowPos(pill(), HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
                         send(PillEvent::Moved(x, y));
                     } else if let Some(r) = pill_rect() {
                         send(PillEvent::Click(pillgeom::region(X0.load(SeqCst) - r.left, r.right - r.left)));
@@ -158,8 +158,9 @@ unsafe extern "system" fn hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     }
 }
 
-/// Make the pill non-activating, route its clicks through a low-level mouse hook
-/// (must be called on the UI thread, which pumps messages), and keep it topmost.
+/// Make the pill non-activating, route its clicks through a low-level mouse hook, and keep it topmost.
+/// The hook lives on its own thread with its own message loop, so a busy UI thread can never
+/// delay it past Windows' LowLevelHooksTimeout (which would silently unhook it).
 pub fn install_pill(pill_hwnd: isize, events: mpsc::Sender<PillEvent>) {
     PILL.store(pill_hwnd, SeqCst);
     let _ = EVENTS.set(Mutex::new(events));
@@ -167,8 +168,15 @@ pub fn install_pill(pill_hwnd: isize, events: mpsc::Sender<PillEvent>) {
         let h = pill();
         let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
         SetWindowLongPtrW(h, GWL_EXSTYLE, ex | (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) as isize);
-        SetWindowsHookExW(WH_MOUSE_LL, Some(hook), std::ptr::null_mut(), 0);
     }
+    std::thread::spawn(|| unsafe {
+        SetWindowsHookExW(WH_MOUSE_LL, Some(hook), std::ptr::null_mut(), 0);
+        let mut msg: MSG = std::mem::zeroed();
+        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    });
     std::thread::spawn(|| loop {
         // Some apps (Electron, full-screen windows) push past topmost — re-assert it quietly.
         if pill_rect().is_some() {

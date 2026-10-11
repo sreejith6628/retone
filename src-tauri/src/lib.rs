@@ -53,9 +53,13 @@ pub fn run() {
             }
 
             let settings = app.state::<AppState>().snapshot();
-            for w in shortcuts::register(&handle, &settings) { eprintln!("retone: {w}"); }
+            let shortcut_errors = shortcuts::register(&handle, &settings);
             if settings.first_run_done {
                 pill::show(&handle, settings.show_pill);
+                if !shortcut_errors.is_empty() {
+                    pill::set_status(&handle, retone_core::job::PillStatus::Error(
+                        "Shortcut unavailable — click to change it".into()));
+                }
             } else {
                 winmgr::open_settings(&handle);
             }

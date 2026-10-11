@@ -34,10 +34,25 @@ impl Io {
     }
 }
 
+/// Clipboard contents saved before Retone borrows the clipboard.
+pub enum SavedClip { Empty, Text(String), Image(arboard::ImageData<'static>) }
+
 impl ClipboardIo for Io {
+    type Saved = SavedClip;
+    fn save(&mut self) -> SavedClip {
+        if let Ok(t) = self.clipboard.get_text() { return SavedClip::Text(t); }
+        if let Ok(i) = self.clipboard.get_image() { return SavedClip::Image(i); }
+        SavedClip::Empty
+    }
+    fn restore(&mut self, saved: SavedClip) {
+        let _ = match saved {
+            SavedClip::Text(t) => self.clipboard.set_text(t),
+            SavedClip::Image(i) => self.clipboard.set_image(i),
+            SavedClip::Empty => self.clipboard.clear(),
+        };
+    }
     fn get_text(&mut self) -> Option<String> { self.clipboard.get_text().ok() }
     fn set_text(&mut self, t: &str) { let _ = self.clipboard.set_text(t); }
-    fn clear(&mut self) { let _ = self.clipboard.clear(); }
 }
 
 impl KeySender for Io {

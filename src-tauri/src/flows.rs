@@ -23,28 +23,45 @@ async fn copy(target: Option<Target>) -> Option<String> {
     tauri::async_runtime::spawn_blocking(move || platform::copy_from(target.as_ref())).await.ok().flatten()
 }
 
+const STILL_WORKING: &str = "Still working…";
+
+fn options_open(app: &AppHandle) -> bool { app.get_webview_window(winmgr::OPTIONS).is_some() }
+
 /// Select text → press shortcut / click pill → polished in place with the default tone.
 pub fn quick_polish(app: AppHandle) {
+    if options_open(&app) {
+        winmgr::focus_options(&app);
+        return;
+    }
     let target = platform::current_target();
     tauri::async_runtime::spawn(async move {
         let st = app.state::<AppState>();
-        if st.busy.is_busy() { set_status(&app, PillStatus::Hint("Still working…".into())); return; }
+        // Hold the busy guard from the copy onwards: two overlapping copies would
+        // clobber each other's clipboard snapshot.
+        let Some(guard) = st.busy.try_start() else { set_status(&app, PillStatus::Hint(STILL_WORKING.into())); return; };
         let Some(draft) = copy(target).await else {
             set_status(&app, PillStatus::Hint(job::HINT_NOTHING_SELECTED.into()));
             return;
         };
         let tone = Tone::from_name(&st.snapshot().default_tone).unwrap_or(Tone::Standard);
         run_job(&app, target, draft, tone, Length::Same, String::new(), default_choice(&app)).await;
+        drop(guard);
     });
 }
 
 /// Copy first (while the user's app still has focus), then show the options panel.
 pub fn open_options(app: AppHandle) {
+    if options_open(&app) {
+        winmgr::focus_options(&app);
+        return;
+    }
     let target = platform::current_target();
     tauri::async_runtime::spawn(async move {
-        if app.state::<AppState>().busy.is_busy() { set_status(&app, PillStatus::Hint("Still working…".into())); return; }
+        let st = app.state::<AppState>();
+        let Some(guard) = st.busy.try_start() else { set_status(&app, PillStatus::Hint(STILL_WORKING.into())); return; };
         let draft = copy(target).await.unwrap_or_default();
-        *app.state::<AppState>().pending.lock().unwrap() = Some(Pending { target, draft });
+        drop(guard);
+        *st.pending.lock().unwrap() = Some(Pending { target, draft });
         winmgr::open_options(&app);
     });
 }
@@ -54,9 +71,12 @@ pub fn options_go(app: AppHandle, tone: Tone, length: Length, context: String, c
     winmgr::close(&app, winmgr::OPTIONS);
     let Some(Pending { target, draft }) = pending else { return };
     tauri::async_runtime::spawn(async move {
+        let st = app.state::<AppState>();
+        let Some(guard) = st.busy.try_start() else { set_status(&app, PillStatus::Hint(STILL_WORKING.into())); return; };
         // Give the options window time to close so the target can take focus back.
         tokio_sleep(250).await;
         run_job(&app, target, draft, tone, length, context, choice).await;
+        drop(guard);
     });
 }
 
@@ -64,13 +84,10 @@ async fn tokio_sleep(ms: u64) {
     let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(std::time::Duration::from_millis(ms))).await;
 }
 
+/// Runs one job. The caller holds the busy guard.
 async fn run_job(app: &AppHandle, target: Option<Target>, draft: String, tone: Tone, length: Length,
                  context: String, choice: Choice) {
     let st = app.state::<AppState>();
-    let Some(_guard) = st.busy.try_start() else {
-        set_status(app, PillStatus::Hint("Still working…".into()));
-        return;
-    };
     let settings = st.snapshot();
     let Some(id) = ProviderId::from_key(&choice.provider) else {
         set_status(app, PillStatus::Error("Unknown AI provider — click to open Settings".into()));

@@ -65,6 +65,14 @@ pub fn open_options(app: &AppHandle) {
     });
 }
 
+/// Bring an already-open options panel to the front.
+pub fn focus_options(app: &AppHandle) {
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = app2.get_webview_window(OPTIONS) { focus(&w); }
+    });
+}
+
 /// Options opened from a global shortcut must take keyboard focus from the app in front.
 fn focus(win: &tauri::WebviewWindow) {
     let _ = win.set_focus();
