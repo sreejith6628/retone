@@ -36,7 +36,8 @@ pub fn clean_output(s: &str) -> String { s.replace("\r\n", "\n").trim().to_strin
 
 pub fn looks_signed_out(text: &str) -> bool {
     let t = text.to_lowercase();
-    ["failed to authenticate", "not logged in", "/login", "please log in", "please login", "oauth", "unauthorized", "sign in"]
+    ["failed to authenticate", "not logged in", "run /login", "please log in", "please login",
+     "codex login", "session expired", "auth method"]
         .iter().any(|k| t.contains(k))
 }
 
@@ -70,6 +71,8 @@ pub(crate) async fn post_json(url: &str, headers: &[(&str, String)], body: serde
     let msg = v["error"]["message"].as_str().map(String::from).unwrap_or_else(|| format!("HTTP {status}"));
     if status.as_u16() == 401 || status.as_u16() == 403 { Err(ProviderError::Auth(msg)) } else { Err(ProviderError::Failed(msg)) }
 }
+
+pub(crate) const TRUNCATED: &str = "response was cut off (too long)";
 
 pub(crate) fn non_empty(s: Option<&str>) -> Result<String, ProviderError> {
     let t = clean_output(s.unwrap_or(""));

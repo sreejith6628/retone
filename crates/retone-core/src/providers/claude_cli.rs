@@ -55,6 +55,10 @@ mod tests {
         assert!(crate::providers::looks_signed_out("Failed to authenticate: OAuth session expired"));
         assert!(crate::providers::looks_signed_out("Please run /login"));
         assert!(!crate::providers::looks_signed_out("Hi Rahul, please share the SOW."));
+        assert!(!crate::providers::looks_signed_out("Logged in via OAuth"));
+        assert!(!crate::providers::looks_signed_out("Rate limited. Sign in to claude.ai to upgrade your plan."));
+        assert!(!crate::providers::looks_signed_out("HTTP 401 Unauthorized from proxy"));
+        assert!(crate::providers::looks_signed_out("Not logged in. Please run `codex login`."));
     }
     #[test]
     fn clean_output_trims_and_normalises() {

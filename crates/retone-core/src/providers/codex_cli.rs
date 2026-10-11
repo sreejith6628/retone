@@ -15,6 +15,22 @@ impl CodexCli {
     fn exe(&self) -> Option<std::path::PathBuf> { resolve_executable("codex", self.exe_override.as_deref()) }
 }
 
+/// Map a codex run + its `--output-last-message` file to a result.
+pub fn codex_result(mut out: crate::procutil::RunOutput, last_message: Option<String>) -> Result<String, ProviderError> {
+    if out.status == Some(0) {
+        match last_message {
+            Some(last) => out.stdout = last,
+            None => return Err(ProviderError::Failed("Codex returned no message".into())),
+        }
+    }
+    finish_cli(out)
+}
+
+pub fn codex_logged_in(status_stdout: &str) -> bool {
+    let t = status_stdout.to_lowercase();
+    t.contains("logged in") && !t.contains("not logged in")
+}
+
 #[async_trait]
 impl Provider for CodexCli {
     async fn complete(&self, req: &CompletionRequest) -> Result<String, ProviderError> {
@@ -25,18 +41,15 @@ impl Provider for CodexCli {
 ---
 
 {}", req.system, req.user);
-        let mut out = run(&exe, &Self::args(req.model.as_deref(), "out.txt"), &stdin, job.path(), TIMEOUT)
+        let out = run(&exe, &Self::args(req.model.as_deref(), "out.txt"), &stdin, job.path(), TIMEOUT)
             .await.map_err(map_run_err)?;
-        if out.status == Some(0) {
-            if let Ok(last) = std::fs::read_to_string(job.path().join("out.txt")) { out.stdout = last; }
-        }
-        finish_cli(out)
+        codex_result(out, std::fs::read_to_string(job.path().join("out.txt")).ok())
     }
     async fn status(&self) -> ProviderStatus {
         let Some(exe) = self.exe() else { return ProviderStatus::NotInstalled };
         let Ok(job) = tempfile::tempdir() else { return ProviderStatus::Error("temp dir".into()) };
         match run(&exe, &["login".into(), "status".into()], "", job.path(), std::time::Duration::from_secs(15)).await {
-            Ok(o) if o.status == Some(0) && !looks_signed_out(&o.stdout) => ProviderStatus::Ready,
+            Ok(o) if o.status == Some(0) && codex_logged_in(&o.stdout) => ProviderStatus::Ready,
             Ok(_) => ProviderStatus::SignedOut,
             Err(e) => ProviderStatus::Error(e.to_string()),
         }
@@ -52,5 +65,22 @@ mod tests {
             ["exec","--skip-git-repo-check","--ephemeral","--ignore-user-config","--sandbox","read-only","--color","never",
              "-m","gpt-5-mini","--output-last-message","out.txt","-"]);
         assert!(!CodexCli::args(None, "out.txt").contains(&"-m".to_string()));
+    }
+    #[test]
+    fn missing_last_message_is_failure_not_banner() {
+        let ok = |o: &str| crate::procutil::RunOutput { status: Some(0), stdout: o.into(), stderr: String::new() };
+        assert_eq!(codex_result(ok("OpenAI Codex v0.162
+model: gpt-5
+sandbox: read-only"), None),
+                   Err(ProviderError::Failed("Codex returned no message".into())));
+        assert_eq!(codex_result(ok("banner"), Some(" Hi team 
+".into())), Ok("Hi team".into()));
+        assert_eq!(codex_result(ok("banner"), Some("  ".into())), Err(ProviderError::EmptyOutput));
+    }
+    #[test]
+    fn login_status_requires_positive_phrase() {
+        assert!(codex_logged_in("Logged in using ChatGPT"));
+        assert!(codex_logged_in("Logged in using an API key - sk-***"));
+        assert!(!codex_logged_in("Not logged in"));
     }
 }

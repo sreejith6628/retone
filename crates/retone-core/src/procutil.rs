@@ -1,4 +1,4 @@
-//! Spawning CLI tools safely: resolution (incl. Windows .cmd shims), no console window,
+//! Spawning CLI tools safely: resolution (incl. Windows .cmd shims, spawned via std), no console window,
 //! login-shell PATH on macOS, concurrent stdin/stdout, timeout with process-tree kill.
 
 use std::path::{Path, PathBuf};
@@ -68,39 +68,19 @@ pub fn resolve_executable(name: &str, override_path: Option<&str>) -> Option<Pat
     which::which_in(name, Some(child_path()), cwd).ok()
 }
 
-fn is_shim(exe: &Path) -> bool {
-    cfg!(windows) && exe.extension().and_then(|e| e.to_str())
-        .map(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat")).unwrap_or(false)
-}
-
-/// Quote one argument for `cmd.exe /s /c` + the C runtime parser node uses.
-#[cfg(windows)]
-fn quote_win(a: &str) -> String {
-    format!("\"{}\"", a.replace('"', "\\\""))
-}
-
 fn build_command(exe: &Path, args: &[String], cwd: &Path) -> std::process::Command {
-    let mut c;
+    // On Windows, std spawns .cmd/.bat shims via cmd.exe with escaping that is safe against
+    // cmd metacharacters (%, ^, &, ", …) and refuses arguments it cannot quote safely.
+    let mut c = std::process::Command::new(exe);
+    c.args(args);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        if is_shim(exe) {
-            c = std::process::Command::new("cmd.exe");
-            let inner = std::iter::once(quote_win(&exe.display().to_string()))
-                .chain(args.iter().map(|a| quote_win(a))).collect::<Vec<_>>().join(" ");
-            c.raw_arg(format!("/d /s /c \"{inner}\""));
-        } else {
-            c = std::process::Command::new(exe);
-            c.args(args);
-        }
         c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        let _ = is_shim;
-        c = std::process::Command::new(exe);
-        c.args(args);
         c.process_group(0); // own group so we can kill the tree
     }
     c.current_dir(cwd).env("PATH", child_path())
@@ -109,6 +89,7 @@ fn build_command(exe: &Path, args: &[String], cwd: &Path) -> std::process::Comma
 }
 
 fn kill_tree(pid: u32) {
+    if pid == 0 { return; } // killpg(0) would kill our own process group
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -128,21 +109,26 @@ pub async fn run(exe: &Path, args: &[String], stdin: &str, cwd: &Path, timeout: 
     let writer = tokio::spawn(async move { let _ = sin.write_all(&input).await; let _ = sin.shutdown().await; });
     let out_task = tokio::spawn(read_all(child.stdout.take().expect("piped stdout")));
     let err_task = tokio::spawn(read_all(child.stderr.take().expect("piped stderr")));
-    match tokio::time::timeout(timeout, child.wait()).await {
-        Ok(Ok(status)) => {
+    let (out_abort, err_abort) = (out_task.abort_handle(), err_task.abort_handle());
+    // The timeout covers the process *and* draining its output: a descendant that inherited
+    // stdout can keep the pipe open after the root exits.
+    let finished = tokio::time::timeout(timeout, async {
+        let status = child.wait().await;
+        (status, out_task.await.unwrap_or_default(), err_task.await.unwrap_or_default())
+    }).await;
+    match finished {
+        Ok((Ok(status), stdout, stderr)) => {
             let _ = writer.await;
             let norm = |b: Vec<u8>| String::from_utf8_lossy(&b).replace("\r\n", "\n");
-            let stdout = norm(out_task.await.unwrap_or_default());
-            let stderr = norm(err_task.await.unwrap_or_default());
-            Ok(RunOutput { status: status.code(), stdout, stderr })
+            Ok(RunOutput { status: status.code(), stdout: norm(stdout), stderr: norm(stderr) })
         }
-        Ok(Err(e)) => Err(RunError::Spawn(e.to_string())),
+        Ok((Err(e), _, _)) => Err(RunError::Spawn(e.to_string())),
         Err(_) => {
-            // Kill the tree while the root is still alive, so its descendants can be found.
+            // Kill the tree while the root is (usually) still alive, so its descendants can be found.
             kill_tree(pid);
             let _ = child.kill().await;
-            out_task.abort();
-            err_task.abort();
+            out_abort.abort();
+            err_abort.abort();
             Err(RunError::Timeout)
         }
     }

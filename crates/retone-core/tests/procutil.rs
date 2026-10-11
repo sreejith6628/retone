@@ -90,3 +90,34 @@ fn resolve_prefers_override_then_path() {
     assert!(resolve_executable("node", None).is_some());
     assert_eq!(resolve_executable("definitely-not-a-real-cli-xyz", None), None);
 }
+
+#[tokio::test]
+async fn cmd_metacharacters_are_passed_literally() {
+    let tmp = tempfile::tempdir().unwrap();
+    let exe = make_shim(tmp.path());
+    let tricky = ["a\" & echo INJECTED & \"b", "%TEMP%", "x^y", "a&b|c<d>e"];
+    match run(&exe, &s(&[&["args"][..], &tricky[..]].concat()), "", tmp.path(), T).await {
+        Ok(out) => {
+            assert!(!out.stdout.contains("INJECTED
+") && !out.stdout.starts_with("INJECTED"), "{out:?}");
+            let got: Vec<String> = serde_json::from_str(out.stdout.trim()).unwrap_or_else(|_| panic!("{out:?}"));
+            assert_eq!(got, tricky);
+        }
+        Err(RunError::Spawn(_)) => {} // refusing unsafe args is acceptable; executing them is not
+        Err(e) => panic!("{e:?}"),
+    }
+}
+
+#[tokio::test]
+async fn timeout_covers_orphan_holding_stdout() {
+    let tmp = tempfile::tempdir().unwrap();
+    let exe = make_shim(tmp.path());
+    let pidfile = tmp.path().join("orphan.pid");
+    let t = Instant::now();
+    let r = run(&exe, &s(&["orphan", pidfile.to_str().unwrap()]), "", tmp.path(), Duration::from_secs(2)).await;
+    assert!(t.elapsed() < Duration::from_secs(8), "run blocked for {:?}", t.elapsed());
+    match r { Ok(o) => assert_eq!(o.stdout, "hi"), Err(e) => assert!(matches!(e, RunError::Timeout), "{e:?}") }
+    std::thread::sleep(Duration::from_millis(500));
+    let gpid: u32 = std::fs::read_to_string(&pidfile).unwrap().trim().parse().unwrap();
+    assert!(!pid_alive(gpid), "orphan {gpid} survived");
+}

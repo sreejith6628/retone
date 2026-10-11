@@ -53,3 +53,21 @@ async fn empty_choice_is_empty_output() {
     let p = OpenAiCompat { base_url: s.uri(), api_key: Some("k".into()) };
     assert_eq!(p.complete(&req()).await, Err(ProviderError::EmptyOutput));
 }
+
+#[tokio::test]
+async fn anthropic_truncated_is_error() {
+    let s = MockServer::start().await;
+    Mock::given(method("POST")).respond_with(ResponseTemplate::new(200).set_body_json(
+        json!({"content":[{"type":"text","text":"Hi te"}],"stop_reason":"max_tokens"}))).mount(&s).await;
+    let p = AnthropicApi { base_url: s.uri(), api_key: Some("k".into()) };
+    assert_eq!(p.complete(&req()).await, Err(ProviderError::Failed("response was cut off (too long)".into())));
+}
+
+#[tokio::test]
+async fn openai_truncated_is_error() {
+    let s = MockServer::start().await;
+    Mock::given(method("POST")).respond_with(ResponseTemplate::new(200).set_body_json(
+        json!({"choices":[{"message":{"content":"Hi te"},"finish_reason":"length"}]}))).mount(&s).await;
+    let p = OpenAiCompat { base_url: s.uri(), api_key: Some("k".into()) };
+    assert_eq!(p.complete(&req()).await, Err(ProviderError::Failed("response was cut off (too long)".into())));
+}

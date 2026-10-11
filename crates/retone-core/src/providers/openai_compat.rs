@@ -12,6 +12,7 @@ impl Provider for OpenAiCompat {
             {"role": "system", "content": req.system}, {"role": "user", "content": req.user}]});
         let v = post_json(&format!("{}/chat/completions", self.base_url.trim_end_matches('/')),
                           &[("authorization", format!("Bearer {key}"))], body).await?;
+        if v["choices"][0]["finish_reason"] == "length" { return Err(ProviderError::Failed(TRUNCATED.into())); }
         non_empty(v["choices"][0]["message"]["content"].as_str())
     }
     async fn status(&self) -> ProviderStatus {
