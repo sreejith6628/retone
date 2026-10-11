@@ -2,3 +2,4 @@
 pub mod prompt;
 pub mod procutil;
 pub mod providers;
+pub mod settings;
