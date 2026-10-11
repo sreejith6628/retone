@@ -54,3 +54,23 @@ pub(crate) fn finish_cli(out: crate::procutil::RunOutput) -> Result<String, Prov
 pub(crate) fn map_run_err(e: crate::procutil::RunError) -> ProviderError {
     match e { crate::procutil::RunError::Timeout => ProviderError::Timeout, crate::procutil::RunError::Spawn(m) => ProviderError::Failed(m) }
 }
+
+pub mod anthropic_api;
+pub mod openai_compat;
+
+pub(crate) async fn post_json(url: &str, headers: &[(&str, String)], body: serde_json::Value) -> Result<serde_json::Value, ProviderError> {
+    let client = reqwest::Client::builder().timeout(TIMEOUT).build().map_err(|e| ProviderError::Failed(e.to_string()))?;
+    let mut rb = client.post(url).json(&body);
+    for (k, v) in headers { rb = rb.header(*k, v); }
+    let resp = rb.send().await.map_err(|e| if e.is_timeout() { ProviderError::Timeout } else { ProviderError::Failed(e.to_string()) })?;
+    let status = resp.status();
+    let v: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
+    if status.is_success() { return Ok(v); }
+    let msg = v["error"]["message"].as_str().map(String::from).unwrap_or_else(|| format!("HTTP {status}"));
+    if status.as_u16() == 401 || status.as_u16() == 403 { Err(ProviderError::Auth(msg)) } else { Err(ProviderError::Failed(msg)) }
+}
+
+pub(crate) fn non_empty(s: Option<&str>) -> Result<String, ProviderError> {
+    let t = clean_output(s.unwrap_or(""));
+    if t.is_empty() { Err(ProviderError::EmptyOutput) } else { Ok(t) }
+}
