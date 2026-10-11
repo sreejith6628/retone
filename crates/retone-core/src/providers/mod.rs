@@ -3,6 +3,8 @@ use async_trait::async_trait;
 use std::time::Duration;
 
 pub mod claude_cli;
+pub mod codex_cli;
+pub mod gemini_cli;
 
 pub const TIMEOUT: Duration = Duration::from_secs(60);
 
