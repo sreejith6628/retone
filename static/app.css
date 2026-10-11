@@ -1,0 +1,65 @@
+:root {
+  --accent: #d97757;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbe8e1;
+  --bg: #faf9f7;
+  --panel: #ffffff;
+  --ink: #1f1e1c;
+  --muted: #6b6862;
+  --line: #e6e2dc;
+  --ok: #2f7d4f;
+  --ok-soft: #e3f3e9;
+  --warn: #9a6400;
+  --warn-soft: #fbf0d9;
+  --bad: #b3261e;
+  --bad-soft: #fbe4e2;
+  --radius: 10px;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent-soft: #3a2a24;
+    --bg: #1c1b1a;
+    --panel: #252422;
+    --ink: #f1efeb;
+    --muted: #a7a39c;
+    --line: #3a3835;
+    --ok: #7cc79a;
+    --ok-soft: #1f3327;
+    --warn: #e7b25a;
+    --warn-soft: #3a2f1b;
+    --bad: #f08b84;
+    --bad-soft: #3d2220;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); }
+body.pill-body, body.pill-body html { background: transparent !important; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 8px;
+  padding: 7px 14px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.primary:disabled { opacity: .55; cursor: default; }
+button.link { border: none; background: none; color: var(--accent); padding: 0; }
+input[type=text], input[type=password], select, textarea {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 10px; width: 100%;
+}
+textarea { resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+label.check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.caps { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.badge.ready { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.bad { background: var(--bad-soft); color: var(--bad); }
+.badge.idle { background: var(--line); color: var(--muted); }
+code { background: var(--line); padding: 1px 6px; border-radius: 5px; font-size: 12px; }

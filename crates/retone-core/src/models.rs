@@ -1,8 +1,8 @@
 //! Curated model lists, embedded from resources/models.json.
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct ModelInfo { pub id: String, pub label: String }
 
 fn all() -> HashMap<String, Vec<ModelInfo>> {
