@@ -32,6 +32,17 @@ pub fn parse_output(stdout: &str) -> String {
     clean_output(trimmed)
 }
 
+/// Gemini reports failures as a JSON object (`{"error":{"message":..}}`) on stderr.
+pub fn parse_error(stderr: &str) -> ProviderError {
+    let t = stderr.trim();
+    let msg = t.find('{').and_then(|i| serde_json::from_str::<serde_json::Value>(&t[i..]).ok())
+        .and_then(|v| v["error"]["message"].as_str().map(String::from))
+        .unwrap_or_else(|| t.lines().next().unwrap_or("failed").to_string());
+    let lower = msg.to_lowercase();
+    if lower.contains("auth method") || looks_signed_out(&msg) { return ProviderError::SignedOut; }
+    ProviderError::Failed(msg.chars().take(200).collect())
+}
+
 #[async_trait]
 impl Provider for GeminiCli {
     async fn complete(&self, req: &CompletionRequest) -> Result<String, ProviderError> {
@@ -46,6 +57,7 @@ impl Provider for GeminiCli {
 
 {}", req.system, req.user);
         let mut out = run(&exe, &Self::args(req.model.as_deref()), &stdin, job.path(), TIMEOUT).await.map_err(map_run_err)?;
+        if out.status != Some(0) { return Err(parse_error(&out.stderr)); }
         out.stdout = parse_output(&out.stdout);
         finish_cli(out)
     }
@@ -77,6 +89,22 @@ mod tests {
         assert_eq!(parse_output("Loaded cached credentials.
 Hi team
 "), "Hi team");
+    }
+    #[test]
+    fn json_errors_are_mapped() {
+        let auth = "{
+  \"session_id\": \"x\",
+  \"error\": {
+    \"type\": \"Error\",
+    \"message\": \"Please set an Auth method in your settings.json\",
+    \"code\": 41
+  }
+}";
+        assert_eq!(parse_error(auth), ProviderError::SignedOut);
+        let quota = "{\"error\":{\"message\":\"Quota exceeded for model\",\"code\":429}}";
+        assert_eq!(parse_error(quota), ProviderError::Failed("Quota exceeded for model".into()));
+        assert_eq!(parse_error("plain failure text
+more"), ProviderError::Failed("plain failure text".into()));
     }
     #[test]
     fn settings_disable_tools() {
