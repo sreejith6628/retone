@@ -45,11 +45,12 @@
   let ready = $derived(providers.filter((p) => statuses[p.key] === "ready"));
   let defaultProvider = $derived(providers.find((p) => p.key === settings?.default_provider));
 
-  // First run: pick the first ready provider as default.
+  // First run: if the default (Claude) turns out not to be ready, switch to the first ready one —
+  // but only once its own check has finished, so a faster check elsewhere doesn't win the race.
   $effect(() => {
-    if (setup && settings && ready.length && statuses[settings.default_provider] !== "ready") {
-      settings.default_provider = ready[0].key;
-    }
+    if (!setup || !settings || !ready.length) return;
+    const own = statuses[settings.default_provider];
+    if (own && own !== "ready" && own !== "unchecked") settings.default_provider = ready[0].key;
   });
 
   async function save(): Promise<boolean> {
