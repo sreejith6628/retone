@@ -30,6 +30,8 @@ pub fn reactivate(t: &Target) -> bool {
     if frontmost_pid() == Some(t.0) { return true; }
     let ok = objc2::rc::autoreleasepool(|_| unsafe {
         match NSRunningApplication::runningApplicationWithProcessIdentifier(t.0) {
+            // Deprecated (no effect) on macOS 14+, where plain activation already suffices.
+            #[allow(deprecated)]
             Some(app) => app.activateWithOptions(NSApplicationActivationOptions::NSApplicationActivateIgnoringOtherApps),
             None => false,
         }
@@ -60,10 +62,10 @@ pub(super) fn modifiers_held() -> bool {
 
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
-    fn AXIsProcessTrusted() -> bool;
+    fn AXIsProcessTrusted() -> u8; // C `Boolean`
 }
 
-pub fn accessibility_trusted() -> bool { unsafe { AXIsProcessTrusted() } }
+pub fn accessibility_trusted() -> bool { unsafe { AXIsProcessTrusted() != 0 } }
 
 pub fn open_accessibility_settings() {
     let _ = std::process::Command::new("open")
