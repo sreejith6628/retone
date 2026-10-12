@@ -135,14 +135,14 @@ unsafe extern "system" fn hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
                     }
                     if MOVED.load(SeqCst) {
                         SetWindowPos(pill(), HWND_TOPMOST, m.pt.x - DX.load(SeqCst), m.pt.y - DY.load(SeqCst), 0, 0,
-                                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                                     SWP_NOSIZE | SWP_NOACTIVATE);
                     }
                 }
                 WM_LBUTTONUP if DOWN.load(SeqCst) => {
                     DOWN.store(false, SeqCst);
                     if MOVED.load(SeqCst) {
                         let (x, y) = (m.pt.x - DX.load(SeqCst), m.pt.y - DY.load(SeqCst));
-                        SetWindowPos(pill(), HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                        SetWindowPos(pill(), HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
                         send(PillEvent::Moved(x, y));
                     } else if let Some(r) = pill_rect() {
                         send(PillEvent::Click(pillgeom::region(X0.load(SeqCst) - r.left, r.right - r.left)));
@@ -158,30 +158,55 @@ unsafe extern "system" fn hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     }
 }
 
-/// Make the pill non-activating, route its clicks through a low-level mouse hook, and keep it topmost.
-/// The hook lives on its own thread with its own message loop, so a busy UI thread can never
-/// delay it past Windows' LowLevelHooksTimeout (which would silently unhook it).
-pub fn install_pill(pill_hwnd: isize, events: mpsc::Sender<PillEvent>) {
+static HOOK: AtomicIsize = AtomicIsize::new(0);
+
+/// (Re)install the low-level mouse hook. Must run on the UI thread: it pumps messages, and
+/// LL hook callbacks are delivered through the installing thread's message loop.
+/// Re-installing periodically heals the case where Windows silently drops a hook that once
+/// exceeded LowLevelHooksTimeout.
+pub fn install_hook() {
+    if DOWN.load(SeqCst) { return; } // never swap hooks in the middle of a click/drag
+    unsafe {
+        let hk = SetWindowsHookExW(WH_MOUSE_LL, Some(hook), std::ptr::null_mut(), 0);
+        if hk.is_null() {
+            crate::applog::line(format!("mouse hook install failed (err {})", GetLastError()));
+            return;
+        }
+        let old = HOOK.swap(hk as isize, SeqCst);
+        if old != 0 { UnhookWindowsHookEx(old as HHOOK); }
+    }
+}
+
+/// Tauri re-applies its own window styles (e.g. on show/resize), so keep ours present.
+fn ensure_pill_styles() {
+    let h = pill();
+    if h.is_null() { return; }
+    unsafe {
+        let want = (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) as isize;
+        let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+        if ex & want != want { SetWindowLongPtrW(h, GWL_EXSTYLE, ex | want); }
+    }
+}
+
+/// Make the pill non-activating, route its clicks through a low-level mouse hook (installed
+/// on the calling UI thread), and keep it topmost. `reinstall_on_ui` must run `install_hook`
+/// on the UI thread; it is called every 30 s.
+pub fn install_pill(pill_hwnd: isize, events: mpsc::Sender<PillEvent>, reinstall_on_ui: impl Fn() + Send + 'static) {
     PILL.store(pill_hwnd, SeqCst);
     let _ = EVENTS.set(Mutex::new(events));
-    unsafe {
-        let h = pill();
-        let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
-        SetWindowLongPtrW(h, GWL_EXSTYLE, ex | (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) as isize);
-    }
-    std::thread::spawn(|| unsafe {
-        SetWindowsHookExW(WH_MOUSE_LL, Some(hook), std::ptr::null_mut(), 0);
-        let mut msg: MSG = std::mem::zeroed();
-        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+    ensure_pill_styles();
+    install_hook();
+    std::thread::spawn(move || {
+        let mut ticks = 0u32;
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+            ticks += 1;
+            if pill_rect().is_some() {
+                ensure_pill_styles();
+                // Some apps (Electron, full-screen windows) push past topmost — re-assert it quietly.
+                unsafe { SetWindowPos(pill(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) };
+            }
+            if ticks % 30 == 0 { reinstall_on_ui(); }
         }
-    });
-    std::thread::spawn(|| loop {
-        // Some apps (Electron, full-screen windows) push past topmost — re-assert it quietly.
-        if pill_rect().is_some() {
-            unsafe { SetWindowPos(pill(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) };
-        }
-        std::thread::sleep(Duration::from_secs(1));
     });
 }

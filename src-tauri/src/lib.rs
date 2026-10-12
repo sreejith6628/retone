@@ -1,3 +1,4 @@
+mod applog;
 mod commands;
 mod flows;
 mod menus;
@@ -31,6 +32,8 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            if let Ok(dir) = app.path().app_log_dir() { applog::init(dir); }
+            applog::line(format!("start v{}", app.package_info().version));
             let path = app.path().app_config_dir()?.join("settings.json");
             app.manage(AppState::load(path));
             let handle = app.handle().clone();
@@ -44,16 +47,19 @@ pub fn run() {
             #[cfg(windows)]
             {
                 pill_win.set_ignore_cursor_events(true)?;
-                platform::install_pill(pill_win.hwnd()?.0 as isize, tx);
+                let hwnd = pill_win.hwnd()?.0 as isize;
+                let ui = handle.clone();
+                platform::install_pill(hwnd, tx, move || { let _ = ui.run_on_main_thread(platform::install_hook); });
             }
             #[cfg(not(windows))]
             {
                 let _ = &pill_win;
-                platform::install_pill(0, tx);
+                platform::install_pill(0, tx, || {});
             }
 
             let settings = app.state::<AppState>().snapshot();
             let shortcut_errors = shortcuts::register(&handle, &settings);
+            for e in &shortcut_errors { applog::line(e); }
             if settings.first_run_done {
                 pill::show(&handle, settings.show_pill);
                 if !shortcut_errors.is_empty() {

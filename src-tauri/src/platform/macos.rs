@@ -73,7 +73,9 @@ pub fn open_accessibility_settings() {
 }
 
 /// Track the last frontmost app that isn't Retone (clicking the pill activates Retone on macOS).
-pub fn install_pill(_pill: isize, _events: mpsc::Sender<PillEvent>) {
+pub fn install_hook() {}
+
+pub fn install_pill(_pill: isize, _events: mpsc::Sender<PillEvent>, _reinstall_on_ui: impl Fn() + Send + 'static) {
     std::thread::spawn(|| loop {
         if let Some(p) = frontmost_pid() { if p != own_pid() { LAST_EXTERNAL_PID.store(p, SeqCst); } }
         std::thread::sleep(Duration::from_millis(250));
