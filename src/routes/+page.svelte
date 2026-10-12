@@ -6,6 +6,8 @@
 
   // One SPA, three windows: render by window label.
   const label = getCurrentWindow().label;
+  // Before first paint, so the pill window never shows an opaque frame.
+  if (label === "pill") document.documentElement.classList.add("pill");
 </script>
 
 {#if label === "pill"}

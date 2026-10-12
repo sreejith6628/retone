@@ -17,7 +17,6 @@
   font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-size: 14px;
   color: var(--ink);
-  background: var(--bg);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -38,7 +37,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); }
-body.pill-body, body.pill-body html { background: transparent !important; overflow: hidden; }
+/* The pill window is transparent outside its rounded shape: nothing may paint a background. */
+html.pill, html.pill body { background: transparent !important; overflow: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button {
   border: 1px solid var(--line); background: var(--panel); border-radius: 8px;

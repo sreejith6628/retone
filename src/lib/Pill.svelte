@@ -14,7 +14,6 @@
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   onMount(() => {
-    document.body.classList.add("pill-body");
     const offs: Array<() => void> = [];
     listen<{ text: string; kind: string }>("pill-status", (e) => { text = e.payload.text; kind = e.payload.kind; })
       .then((u) => offs.push(u));
