@@ -85,7 +85,9 @@ pub fn accessibility_trusted() -> bool { true }
 pub fn open_accessibility_settings() {}
 pub fn request_accessibility() -> bool { true }
 
-// ---------- Pill: display-only webview + WH_MOUSE_LL hook (see docs/spike-notes.md) ----------
+// ---------- Pill: display-only webview + WH_MOUSE_LL hook ----------
+// The pill window never takes focus (WS_EX_NOACTIVATE, cursor events ignored), so the user's app
+// stays in front. A low-level mouse hook swallows clicks/drags inside the pill's rectangle.
 
 static PILL: AtomicIsize = AtomicIsize::new(0);
 static DOWN: AtomicBool = AtomicBool::new(false);

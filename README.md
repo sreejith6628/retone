@@ -94,7 +94,7 @@ Code layout: `crates/retone-core` (all testable logic: prompts, providers, CLI r
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md). The original design notes are in `docs/superpowers/specs/`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md).
 
 ## License
 

@@ -1,4 +1,4 @@
-//! Claude Code CLI (subscription). Flags verified against claude 2.1.x in the AHK tool.
+//! Claude Code CLI (subscription). Flags verified against claude 2.1.x.
 use super::*;
 use crate::procutil::{resolve_executable, run};
 
