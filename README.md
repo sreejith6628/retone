@@ -2,7 +2,17 @@
 
 **Select text anywhere, press a shortcut, get it back polished — using the AI you already pay for.**
 
-Retone is a small Windows and macOS app. It rewrites the text you've selected in any app — Teams, Outlook, Slack, Gmail, WhatsApp Web — and pastes the result back in place. It works with:
+Retone is a small Windows and macOS app. It rewrites the text you've selected in any app — Teams, Outlook, Slack, Gmail, WhatsApp Web — and pastes the result back in place. No Retone account, no subscription, no tracking.
+
+## How it works
+
+1. You select text in any app and press a global shortcut (or click the floating button).
+2. Retone copies the selection, sends it to the AI provider you chose, and waits for the rewrite.
+3. It pastes the result over your selection and restores your clipboard.
+
+See [docs/architecture.md](docs/architecture.md) for the details.
+
+## Providers
 
 | Provider | What you need | Extra cost |
 |---|---|---|
@@ -12,23 +22,37 @@ Retone is a small Windows and macOS app. It rewrites the text you've selected in
 | Anthropic / OpenAI / OpenRouter | An API key | pay per use |
 | Gemini CLI | An API key, Workspace or Vertex account (personal Google sign-in is no longer supported by Google) | depends |
 
-No Retone account, no subscription, no tracking.
+## Install
+
+Download the installer for your OS from the [Releases](../../releases) page. These builds are not code-signed yet, so your OS will warn you the first time.
+
+**Windows**
+
+Run the installer. If SmartScreen says "Windows protected your PC", click **More info → Run anyway**.
+
+**macOS**
+
+1. Open the `.dmg` and drag **Retone** to **Applications**.
+2. The first time, right-click Retone in Applications → **Open** → **Open**. Alternatively, remove the quarantine flag in Terminal:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Retone.app
+   ```
+3. Grant Accessibility permission in **System Settings → Privacy & Security → Accessibility** so Retone can press ⌘C / ⌘V to copy your selection and paste the result. The first-run setup links you there.
 
 ## Using it
 
-- **Quick polish:** select text → `Ctrl+Shift+P` (Windows) / `⌥⌘P` (Mac), or click **✨ Polish** on the floating button.
-- **Polish with options:** `Ctrl+Shift+O` / `⌥⌘O`, or click **▼** on the button — pick a tone (Professional, Friendly, Formal, Casual, Concise, Persuasive, Apologetic, Assertive, Grateful), length, add context ("this goes to my CEO"), or choose a different AI for this one message.
+Default shortcuts (you can change them in Settings):
+
+| Action | Windows | macOS |
+|---|---|---|
+| Quick polish | `Ctrl+Shift+P` | `⌥⌘P` |
+| Polish with options | `Ctrl+Shift+O` | `⌥⌘O` |
+
+- **Quick polish:** select text → press the quick shortcut, or click **✨ Polish** on the floating button.
+- **Polish with options:** press the options shortcut, or click **▼** on the button — pick a tone (Professional, Friendly, Formal, Casual, Concise, Persuasive, Apologetic, Assertive, Grateful), length, add context ("this goes to my CEO"), or choose a different AI for this one message.
 - **Write from scratch:** open options with nothing selected, describe the message, press Enter — it's typed where your cursor is.
 - **Undo:** `Ctrl+Z` / `⌘Z` in your app brings your draft back.
 - The floating button can be dragged anywhere; right-click it for the menu. Retone also lives in the system tray / menu bar.
-
-## Install
-
-Download the installer from the [Releases](../../releases) page.
-
-These builds are not code-signed yet:
-- **Windows:** if SmartScreen says "Windows protected your PC", click **More info → Run anyway**.
-- **macOS:** right-click Retone → **Open** the first time. Then allow it in **System Settings → Privacy & Security → Accessibility** (needed to press ⌘C/⌘V for you). The first-run setup links you there.
 
 ## Setting up a subscription provider
 
@@ -46,19 +70,25 @@ Retone runs these tools with their file/command tools switched off (Claude, Gemi
 - Codex and Gemini may keep their own local session logs; Retone asks Codex not to (`--ephemeral`).
 - Clipboard: Retone restores text and image clipboard contents after copying/pasting. Rich formats (e.g. formatted Outlook text, files) on the clipboard may be lost.
 
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
 ## Build from source
 
 Requirements: Node 22, Rust (stable), and on Windows the MSVC build tools + Windows SDK; on macOS Xcode Command Line Tools.
 
 ```bash
-npm install
+npm ci
 npm run tauri dev      # run
 cargo test -p retone-core
 npm run tauri build    # installers
 ```
 
-Code layout: `crates/retone-core` (all testable logic: prompts, providers, CLI runner, capture, jobs, settings), `src-tauri` (desktop shell and OS adapters), `src` (Svelte UI). Design: `docs/superpowers/specs/`.
+Code layout: `crates/retone-core` (all testable logic: prompts, providers, CLI runner, capture, jobs, settings), `src-tauri` (desktop shell and OS adapters), `src` (Svelte UI).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md). The original design notes are in `docs/superpowers/specs/`.
 
 ## License
 
-MIT
+[MIT](LICENSE)
