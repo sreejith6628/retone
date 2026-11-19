@@ -10,9 +10,12 @@ pub struct CodexCli { pub exe_override: Option<String> }
 /// Outlook/Teams send), web search and sub-agents with no approval prompt, so text injected into
 /// the selection could act on the user's accounts. Passed as `-c features.<name>=false` rather
 /// than `--disable <name>`, because `--disable` rejects names a given Codex version doesn't know.
-pub const DISABLED_FEATURES: [&str; 14] = ["apps", "plugins", "remote_plugin", "shell_tool", "unified_exec",
-    "multi_agent", "image_generation", "browser_use", "computer_use", "in_app_browser", "goals",
-    "tool_suggest", "code_mode_host", "hooks"];
+/// Checked against `codex features list` on 0.162.1; re-check on each Codex upgrade.
+pub const DISABLED_FEATURES: [&str; 24] = ["apps", "plugins", "remote_plugin", "shell_tool", "unified_exec",
+    "multi_agent", "image_generation", "browser_use", "browser_use_external", "browser_use_full_cdp_access",
+    "computer_use", "in_app_browser", "in_app_local_automation", "view_image", "skill_search",
+    "skill_mcp_dependency_install", "worktrees", "workspace_dependencies", "realtime_conversation",
+    "sleep_tool", "goals", "tool_suggest", "code_mode_host", "hooks"];
 
 impl CodexCli {
     pub fn args(model: Option<&str>, out_file: &str) -> Vec<String> {

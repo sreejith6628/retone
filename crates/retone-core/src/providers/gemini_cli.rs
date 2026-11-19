@@ -50,24 +50,46 @@ pub fn parse_output(stdout: &str) -> String {
     clean_output(trimmed)
 }
 
-fn path_key(p: &str) -> String {
+/// The final path component, case-folded on Windows. Retone's job folder name
+/// (`retone-<random>`) is unique, so matching on it alone is enough, and it survives
+/// symlinked temp paths (macOS `/var` vs `/private/var`) and 8.3 short names.
+fn last_component(p: &str) -> String {
     let s = p.trim_end_matches(['/', '\\']);
-    if cfg!(windows) { s.replace('/', "\\").to_lowercase() } else { s.to_string() }
+    let name = s.rsplit(['/', '\\']).next().unwrap_or(s);
+    if cfg!(windows) { name.to_lowercase() } else { name.to_string() }
 }
 
-/// The per-project folder where Gemini keeps chat recordings for `cwd`, looked up in
-/// `<gemini_home>/projects.json` (`{"projects": {"<cwd>": "<slug>"}}`). Only ever returns a
-/// direct child of `<gemini_home>/tmp`, and only for an exact match of our own job folder.
-pub fn session_dir_for(gemini_home: &std::path::Path, cwd: &std::path::Path) -> Option<std::path::PathBuf> {
-    let text = std::fs::read_to_string(gemini_home.join("projects.json")).ok()?;
-    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let want = path_key(&cwd.to_string_lossy());
-    let slug = v["projects"].as_object()?.iter().find(|(k, _)| path_key(k) == want)?.1.as_str()?;
-    let mut parts = std::path::Path::new(slug).components();
-    match (parts.next(), parts.next()) {
-        (Some(std::path::Component::Normal(_)), None) => Some(gemini_home.join("tmp").join(slug)),
-        _ => None,
-    }
+/// A slug Gemini could have produced for one of Retone's job folders: `retone-` followed by
+/// lowercase letters, digits and dashes only. Rejects `.`, `..`, `...`, trailing dots/spaces,
+/// drive letters and separators, so the result can only ever name a folder of our own.
+fn is_retone_slug(slug: &str) -> bool {
+    slug.len() > "retone-".len() && slug.starts_with("retone-")
+        && slug.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// Gemini's home folder: `$GEMINI_CLI_HOME/.gemini` when set (Gemini honours it), else `~/.gemini`.
+pub fn gemini_home() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("GEMINI_CLI_HOME").filter(|v| !v.is_empty()).map(std::path::PathBuf::from)
+        .or_else(dirs::home_dir)?;
+    Some(base.join(".gemini"))
+}
+
+/// The per-project folders where Gemini keeps chat recordings and history for `cwd`, looked up in
+/// `<gemini_home>/projects.json` (`{"projects": {"<cwd>": "<slug>"}}`). Returns
+/// `<gemini_home>/tmp/<slug>` and `<gemini_home>/history/<slug>`, only for an entry whose folder
+/// name equals our job folder's and whose slug passes `is_retone_slug`.
+pub fn session_dirs_for(gemini_home: &std::path::Path, cwd: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let Ok(text) = std::fs::read_to_string(gemini_home.join("projects.json")) else { return vec![] };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return vec![] };
+    let want = last_component(&cwd.to_string_lossy());
+    if !want.starts_with("retone-") { return vec![]; }
+    let Some(projects) = v["projects"].as_object() else { return vec![] };
+    projects.iter()
+        .filter(|(k, _)| last_component(k) == want)
+        .filter_map(|(_, slug)| slug.as_str())
+        .filter(|slug| is_retone_slug(slug))
+        .flat_map(|slug| [gemini_home.join("tmp").join(slug), gemini_home.join("history").join(slug)])
+        .collect()
 }
 
 /// Gemini reports failures as a JSON object (`{"error":{"message":..}}`) on stderr.
@@ -102,8 +124,9 @@ impl Provider for GeminiCli {
 {}", req.system, req.user);
         let result = run(&exe, &Self::args(req.model.as_deref(), &policy.to_string_lossy()), &stdin, &work, TIMEOUT).await;
         // Gemini records every session (including the full draft) under ~/.gemini/tmp/<project>/.
-        if let Some(gemini_home) = dirs::home_dir().map(|h| h.join(".gemini")) {
-            if let Some(dir) = session_dir_for(&gemini_home, &work) { let _ = std::fs::remove_dir_all(dir); }
+        // Best effort: if Gemini's registry can't be read, the recording stays (see README).
+        if let Some(home) = gemini_home() {
+            for dir in session_dirs_for(&home, &work) { let _ = std::fs::remove_dir_all(dir); }
         }
         let mut out = result.map_err(map_run_err)?;
         if out.status != Some(0) { return Err(parse_error(&out.stderr)); }
@@ -141,14 +164,30 @@ mod tests {
     #[test]
     fn session_dir_lookup_matches_only_our_job() {
         let home = tempfile::tempdir().unwrap();
-        let job = if cfg!(windows) { r"C:\Users\X\AppData\Local\Temp\.tmpAbC12" } else { "/tmp/.tmpAbC12" };
-        let key = if cfg!(windows) { job.to_lowercase() } else { job.to_string() };
-        let json = serde_json::json!({"projects": {key: "tmpabc12", "/work/proj": "proj", "/evil": "../escape"}});
-        std::fs::write(home.path().join("projects.json"), json.to_string()).unwrap();
+        let h = home.path();
+        // Gemini records the physical path (macOS /private/var); Retone knows the /var one.
+        let key = if cfg!(windows) { r"c:\users\x\appdata\local\temp\.tmpabc\retone-tmpabc12" }
+                  else { "/private/var/folders/xy/T/.tmpAbC/retone-tmpAbC12" };
+        let job = if cfg!(windows) { r"C:\Users\X\AppData\Local\Temp\.tmpAbC\retone-tmpAbC12" }
+                  else { "/var/folders/xy/T/.tmpAbC/retone-tmpAbC12" };
+        let json = serde_json::json!({"projects": {
+            key: "retone-tmpabc12", "/work/proj": "proj", "/evil/retone-x": "../escape",
+            "/a/retone-dots": "...", "/a/retone-sp": " ", "/a/retone-trail": "retone-a.", "/a/retone-drive": "C:",
+            "/a/retone-colon": "a:b", "/a/retone-up": "Retone-UP"}});
+        std::fs::write(h.join("projects.json"), json.to_string()).unwrap();
         let p = std::path::Path::new;
-        assert_eq!(session_dir_for(home.path(), p(job)), Some(home.path().join("tmp").join("tmpabc12")));
-        assert_eq!(session_dir_for(home.path(), p("/nope")), None);
-        assert_eq!(session_dir_for(home.path(), p("/evil")), None);
+        assert_eq!(session_dirs_for(h, p(job)),
+                   vec![h.join("tmp").join("retone-tmpabc12"), h.join("history").join("retone-tmpabc12")]);
+        assert!(session_dirs_for(h, p("/nope")).is_empty());
+        assert!(session_dirs_for(h, p("/work/proj")).is_empty());
+        for bad in ["/x/retone-x", "/x/retone-dots", "/x/retone-sp", "/x/retone-trail", "/x/retone-drive",
+                    "/x/retone-colon", "/x/retone-up"] {
+            assert!(session_dirs_for(h, p(bad)).is_empty(), "{bad}");
+        }
+        for slug in ["...", " ", ". .", "retone-", "retone-a.", "retone-a ", "C:", "a:b", "retone-../x", "proj"] {
+            assert!(!is_retone_slug(slug), "{slug}");
+        }
+        assert!(is_retone_slug("retone-tmpabc12-1"));
     }
     #[test]
     fn parse_json_and_noise() {
