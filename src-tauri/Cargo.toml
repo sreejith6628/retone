@@ -1,6 +1,6 @@
 [package]
 name = "retone"
-version = "0.1.2"
+version = "0.1.3"
 description = "Rewrite selected text anywhere with your own AI subscription"
 authors = ["Sreejith"]
 license = "MIT"
