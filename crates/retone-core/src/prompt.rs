@@ -1,4 +1,4 @@
-//! Builds the system prompt + user message for one polish. Port of the AHK `BuildExtra`.
+//! Builds the system prompt + user message for one polish.
 
 pub const DEFAULT_STYLE: &str = "You polish workplace chat messages (Microsoft Teams, email, WhatsApp).
 The user's message gives you a draft. Rewrite it so it is clear, concise, warm and professional, in natural Indian business English.

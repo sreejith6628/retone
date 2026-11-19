@@ -35,7 +35,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Retone ${{ github.ref_name }}"
-          releaseBody: "See README for install steps. Unsigned build: Windows SmartScreen → More info → Run anyway; macOS → right-click → Open."
+          releaseBody: "See README for install steps. Unsigned build: Windows SmartScreen → More info → Run anyway; macOS → System Settings → Privacy & Security → Open Anyway (macOS 15+) or right-click → Open (macOS 14 and earlier)."
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

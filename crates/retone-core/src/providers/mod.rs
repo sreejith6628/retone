@@ -61,7 +61,9 @@ pub mod anthropic_api;
 pub mod openai_compat;
 
 pub(crate) async fn post_json(url: &str, headers: &[(&str, String)], body: serde_json::Value) -> Result<serde_json::Value, ProviderError> {
-    let client = reqwest::Client::builder().timeout(TIMEOUT).build().map_err(|e| ProviderError::Failed(e.to_string()))?;
+    // No redirects: reqwest only strips `Authorization` on cross-host redirects, not `x-api-key`.
+    let client = reqwest::Client::builder().timeout(TIMEOUT).redirect(reqwest::redirect::Policy::none())
+        .build().map_err(|e| ProviderError::Failed(e.to_string()))?;
     let mut rb = client.post(url).json(&body);
     for (k, v) in headers { rb = rb.header(*k, v); }
     let resp = rb.send().await.map_err(|e| if e.is_timeout() { ProviderError::Timeout } else { ProviderError::Failed(e.to_string()) })?;

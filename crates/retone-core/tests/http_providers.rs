@@ -71,3 +71,17 @@ async fn openai_truncated_is_error() {
     let p = OpenAiCompat { base_url: s.uri(), api_key: Some("k".into()) };
     assert_eq!(p.complete(&req()).await, Err(ProviderError::Failed("response was cut off (too long)".into())));
 }
+
+#[tokio::test]
+async fn redirects_are_not_followed_with_the_key() {
+    let elsewhere = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"content":[{"type":"text","text":"leaked"}]})))
+        .expect(0).mount(&elsewhere).await;
+    let s = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(307).insert_header("location", format!("{}/v1/messages", elsewhere.uri())))
+        .mount(&s).await;
+    let p = AnthropicApi { base_url: s.uri(), api_key: Some("k".into()) };
+    assert!(matches!(p.complete(&req()).await, Err(ProviderError::Failed(_))));
+}

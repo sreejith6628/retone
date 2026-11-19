@@ -1,0 +1,44 @@
+name: macOS release candidate
+# Builds an unsigned (ad-hoc signed) universal .dmg and uploads it as a workflow artifact.
+# Does not create or publish a GitHub release.
+on:
+  push:
+    branches: ["macos-support", "rc/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+      - run: npm run check
+      - name: Core tests
+        run: cargo test -p retone-core
+      - name: App tests
+        run: cargo test -p retone
+      - name: Build universal app + dmg
+        run: npx tauri build --target universal-apple-darwin --bundles app,dmg
+      - name: Verify bundle
+        run: |
+          APP=target/universal-apple-darwin/release/bundle/macos/Retone.app
+          lipo -info "$APP/Contents/MacOS/"*
+          codesign -dv --verbose=2 "$APP" 2>&1 | head -20
+          ls -la target/universal-apple-darwin/release/bundle/dmg/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Retone-macOS-universal-${{ github.sha }}
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 30

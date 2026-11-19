@@ -36,17 +36,26 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, "quit", "Quit Retone", true, None::<&str>)?,
     ])?;
+    // macOS menu-bar convention: a monochrome template icon, and a click opens the menu.
+    // Windows tray: the app icon, left-click opens Settings, right-click opens the menu.
+    let mac = cfg!(target_os = "macos");
     let mut b = TrayIconBuilder::with_id("retone")
         .tooltip("Retone")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        .show_menu_on_left_click(mac)
         .on_menu_event(|app, e| handle(app, e.id().as_ref()))
-        .on_tray_icon_event(|tray, e| {
+        .on_tray_icon_event(move |tray, e| {
+            if mac { return; }
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
                 winmgr::open_settings(tray.app_handle());
             }
         });
-    if let Some(icon) = app.default_window_icon() { b = b.icon(icon.clone()); }
+    if mac {
+        let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-template.png"))?;
+        b = b.icon(icon).icon_as_template(true);
+    } else if let Some(icon) = app.default_window_icon() {
+        b = b.icon(icon.clone());
+    }
     b.build(app)?;
     Ok(())
 }

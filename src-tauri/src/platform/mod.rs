@@ -15,27 +15,53 @@ pub use self::macos::*;
 /// Real clipboard + keyboard, implementing the core capture traits.
 pub struct Io {
     clipboard: arboard::Clipboard,
-    keys: enigo::Enigo,
+    /// Not used on macOS (keys go through CGEvent), where it would fail without Accessibility.
+    keys: Option<enigo::Enigo>,
 }
 
 impl Io {
     pub fn new() -> Option<Io> {
         let clipboard = arboard::Clipboard::new().ok()?;
-        let keys = enigo::Enigo::new(&enigo::Settings::default()).ok()?;
+        let keys = if cfg!(target_os = "macos") { None }
+                   else { Some(enigo::Enigo::new(&enigo::Settings::default()).ok()?) };
         Some(Io { clipboard, keys })
     }
 
+    /// Ctrl+<c> on Windows; ⌘<c> on macOS (posted as CGEvents with an explicit Command flag,
+    /// which is safe off the main thread and ignores any modifier the user is still holding).
     fn chord(&mut self, c: char) {
-        use enigo::{Direction::*, Key, Keyboard};
-        let modifier = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };
-        let _ = self.keys.key(modifier, Press);
-        let _ = self.keys.key(Key::Unicode(c), Click);
-        let _ = self.keys.key(modifier, Release);
+        #[cfg(target_os = "macos")]
+        {
+            let _ = &self.keys;
+            command_chord(c);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            use enigo::{Direction::*, Key, Keyboard};
+            let Some(keys) = self.keys.as_mut() else { return };
+            let _ = keys.key(Key::Control, Press);
+            let _ = keys.key(Key::Unicode(c), Click);
+            let _ = keys.key(Key::Control, Release);
+        }
     }
 }
 
 /// Clipboard contents saved before Retone borrows the clipboard.
 pub enum SavedClip { Empty, Text(String), Image(arboard::ImageData<'static>) }
+
+/// Everything Retone itself puts on the clipboard (the copy sentinel, the result being pasted,
+/// the user's own clipboard being put back) is flagged as private. Windows: excluded from Win+V
+/// history and cloud clipboard. macOS: marked `org.nspasteboard.ConcealedType`, which clipboard
+/// managers that follow the convention skip; it does not stop Universal Clipboard/Handoff.
+/// The selection itself is copied by the target app (simulated Ctrl+C/⌘C) and can't be flagged.
+fn private_set(cb: &mut arboard::Clipboard) -> arboard::Set<'_> {
+    #[cfg(windows)]
+    { use arboard::SetExtWindows; cb.set().exclude_from_monitoring() }
+    #[cfg(target_os = "macos")]
+    { use arboard::SetExtApple; cb.set().exclude_from_history() }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    { cb.set() }
+}
 
 impl ClipboardIo for Io {
     type Saved = SavedClip;
@@ -46,13 +72,13 @@ impl ClipboardIo for Io {
     }
     fn restore(&mut self, saved: SavedClip) {
         let _ = match saved {
-            SavedClip::Text(t) => self.clipboard.set_text(t),
-            SavedClip::Image(i) => self.clipboard.set_image(i),
+            SavedClip::Text(t) => private_set(&mut self.clipboard).text(t),
+            SavedClip::Image(i) => private_set(&mut self.clipboard).image(i),
             SavedClip::Empty => self.clipboard.clear(),
         };
     }
     fn get_text(&mut self) -> Option<String> { self.clipboard.get_text().ok() }
-    fn set_text(&mut self, t: &str) { let _ = self.clipboard.set_text(t); }
+    fn set_text(&mut self, t: &str) { let _ = private_set(&mut self.clipboard).text(t); }
 }
 
 impl KeySender for Io {
@@ -69,7 +95,7 @@ impl KeySender for Io {
 
 /// Copy the selection from `target` (switching back to it first where the platform needs that).
 pub fn copy_from(target: Option<&Target>) -> Option<String> {
-    if let Some(t) = target { before_copy(t); }
+    if let Some(t) = target { if !before_copy(t) { return None; } }
     let mut io = Io::new()?;
     retone_core::capture::copy_selection(&mut io)
 }
