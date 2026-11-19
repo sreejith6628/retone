@@ -8,7 +8,7 @@ Status: `claude auth status` → JSON with `loggedIn`.
 - `codex exec [PROMPT]`: prompt read from stdin when omitted or `-`.
 - Used: `--skip-git-repo-check`, `--ephemeral` (no session files), `--ignore-user-config` (no user MCP/config; auth still from CODEX_HOME), `--sandbox read-only`, `--color never`, `-m <model>`, `-o/--output-last-message <file>`.
 - No system-prompt flag → system prompt prepended to stdin.
-- No flag disables the shell tool entirely; read-only sandbox is the limit (residual risk documented, spec §9).
+- 
 - Status: `codex login status` → exit 0 + "Logged in using ChatGPT" when signed in.
 - Models: no reliable list for ChatGPT-plan auth → "CLI default" + custom ID.
 
@@ -16,7 +16,7 @@ Status: `claude auth status` → JSON with `loggedIn`.
 - `-p/--prompt <text>`: headless; appended to stdin input.
 - `-m <model>`, `-o/--output-format json` (`{"response": ...}`).
 - `--approval-mode plan` = read-only mode. **Never** `-y/--yolo` or `--approval-mode yolo`.
-- Tool exclusion: settings v2 key `tools.exclude` (array). Project settings (`<cwd>/.gemini/settings.json`) need a trusted workspace → pass `--skip-trust`.
+- 
 - Auth: OAuth creds under `~/.gemini/`; none present on owner's machine yet (sign-in in Task 10).
 
 ## Curated model IDs (resources/models.json) — checked 2026-10-11

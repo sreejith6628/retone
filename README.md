@@ -60,14 +60,15 @@ Default shortcuts (you can change them in Settings):
 2. In Retone → Settings → AI providers, click **Sign in…** — a terminal opens with the provider's own login. Retone never sees your password or tokens.
 3. Click **Re-check**, then **Test**.
 
-Retone runs these tools with their file/command tools switched off (Claude, Gemini) or in read-only mode (Codex), inside an empty temporary folder, and asks them only to rewrite text.
+Retone runs these tools inside an empty temporary folder and asks them only to rewrite text. Claude Code runs with all tools disabled (`--tools ""`, no MCP servers, no user settings). Gemini CLI runs in read-only plan mode with a policy that denies every tool, including MCP tools. Codex runs in its read-only sandbox with connected apps, web search, the shell tool, plugins and sub-agents switched off. These are the tools' own controls: a future version of a tool could add new capabilities, so Retone pins and re-checks the flags it relies on (see `docs/cli-flags.md`).
 
 ## Privacy & security
 
 - Your text goes only to the provider you choose. Nothing is sent anywhere else; there is no telemetry.
 - API keys are stored in Windows Credential Manager / macOS Keychain, never in a file.
-- Selected text is clearly marked to the AI as text to rewrite, not instructions to follow. Codex's read-only sandbox can still read files if a model were manipulated; the result is always shown to you in place.
-- Codex and Gemini may keep their own local session logs; Retone asks Codex not to (`--ephemeral`).
+- Selected text is clearly marked to the AI as text to rewrite, not instructions to follow. Because the AI tools run with their tools switched off, text you select can at worst change what the rewrite says. It can't make the AI run commands, read your files, browse, or use your connected accounts. Check the result before you send it, especially when you polish text someone else wrote.
+- Retone asks each tool not to keep a session history: Claude (`--no-session-persistence`), Codex (`--ephemeral`). Gemini CLI always records sessions, so Retone deletes its record after each job. The CLIs may still send their own usage telemetry to their vendors; see each tool's settings.
+- Retone's own clipboard writes are excluded from Windows clipboard history/cloud clipboard and from macOS clipboard managers. The text you copy yourself (Retone's simulated Ctrl+C) is subject to your normal clipboard history settings.
 - Clipboard: Retone restores text and image clipboard contents after copying/pasting. Rich formats (e.g. formatted Outlook text, files) on the clipboard may be lost.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
