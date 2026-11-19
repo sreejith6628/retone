@@ -1,13 +1,27 @@
-//! OpenAI Codex CLI (ChatGPT subscription). Read-only sandbox; see docs/cli-flags.md.
+//! OpenAI Codex CLI (ChatGPT subscription). Read-only sandbox, with connected apps, web search,
+//! the shell tool and sub-agents switched off; see docs/cli-flags.md.
 use super::*;
 use crate::procutil::{resolve_executable, run};
 
 pub struct CodexCli { pub exe_override: Option<String> }
 
+/// Codex features that give the model tools beyond plain text. `--ignore-user-config` does not
+/// turn these off: with them on, `codex exec` exposes the user's connected ChatGPT apps (e.g.
+/// Outlook/Teams send), web search and sub-agents with no approval prompt, so text injected into
+/// the selection could act on the user's accounts. Passed as `-c features.<name>=false` rather
+/// than `--disable <name>`, because `--disable` rejects names a given Codex version doesn't know.
+pub const DISABLED_FEATURES: [&str; 14] = ["apps", "plugins", "remote_plugin", "shell_tool", "unified_exec",
+    "multi_agent", "image_generation", "browser_use", "computer_use", "in_app_browser", "goals",
+    "tool_suggest", "code_mode_host", "hooks"];
+
 impl CodexCli {
     pub fn args(model: Option<&str>, out_file: &str) -> Vec<String> {
         let mut a: Vec<String> = ["exec", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config",
                                   "--sandbox", "read-only", "--color", "never"].map(String::from).to_vec();
+        for f in DISABLED_FEATURES { a.push("-c".into()); a.push(format!("features.{f}=false")); }
+        // Unquoted on purpose: Codex treats a value that isn't valid TOML as a literal string,
+        // and this avoids passing `"` through the Windows .cmd shim.
+        a.extend(["-c", "web_search=disabled"].map(String::from));
         if let Some(m) = model.filter(|m| !m.is_empty()) { a.push("-m".into()); a.push(m.into()); }
         a.extend(["--output-last-message", out_file, "-"].map(String::from));
         a
@@ -67,10 +81,21 @@ mod tests {
     use super::*;
     #[test]
     fn args_are_read_only_ephemeral_and_skip_git() {
-        assert_eq!(CodexCli::args(Some("gpt-5-mini"), "out.txt"),
-            ["exec","--skip-git-repo-check","--ephemeral","--ignore-user-config","--sandbox","read-only","--color","never",
-             "-m","gpt-5-mini","--output-last-message","out.txt","-"]);
+        let a = CodexCli::args(Some("gpt-5-mini"), "out.txt");
+        assert_eq!(a[..8], ["exec","--skip-git-repo-check","--ephemeral","--ignore-user-config","--sandbox","read-only","--color","never"]);
+        assert_eq!(a[a.len() - 5..], ["-m","gpt-5-mini","--output-last-message","out.txt","-"]);
         assert!(!CodexCli::args(None, "out.txt").contains(&"-m".to_string()));
+        assert!(!a.iter().any(|x| x.contains("danger") || x == "workspace-write" || x == "--approve-for-me"));
+    }
+    #[test]
+    fn args_switch_off_apps_web_search_and_shell() {
+        let a = CodexCli::args(None, "out.txt");
+        let has_pair = |k: &str, v: &str| a.windows(2).any(|w| w[0] == k && w[1] == v);
+        for f in ["apps", "plugins", "shell_tool", "unified_exec", "multi_agent", "browser_use", "computer_use"] {
+            assert!(has_pair("-c", &format!("features.{f}=false")), "{f} not disabled");
+        }
+        assert!(has_pair("-c", "web_search=disabled"));
+        assert!(!a.iter().any(|x| x == "--disable"), "--disable fails on unknown feature names");
     }
     #[test]
     fn missing_last_message_is_failure_not_banner() {

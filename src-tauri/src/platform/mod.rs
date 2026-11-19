@@ -49,6 +49,18 @@ impl Io {
 /// Clipboard contents saved before Retone borrows the clipboard.
 pub enum SavedClip { Empty, Text(String), Image(arboard::ImageData<'static>) }
 
+/// Everything Retone itself puts on the clipboard (the copy sentinel, the result being pasted,
+/// the user's own clipboard being put back) is kept out of clipboard history and cloud sync, so
+/// drafts and results don't pile up in Win+V / clipboard managers or leave the machine.
+fn private_set(cb: &mut arboard::Clipboard) -> arboard::Set<'_> {
+    #[cfg(windows)]
+    { use arboard::SetExtWindows; cb.set().exclude_from_monitoring() }
+    #[cfg(target_os = "macos")]
+    { use arboard::SetExtApple; cb.set().exclude_from_history() }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    { cb.set() }
+}
+
 impl ClipboardIo for Io {
     type Saved = SavedClip;
     fn save(&mut self) -> SavedClip {
@@ -58,13 +70,13 @@ impl ClipboardIo for Io {
     }
     fn restore(&mut self, saved: SavedClip) {
         let _ = match saved {
-            SavedClip::Text(t) => self.clipboard.set_text(t),
-            SavedClip::Image(i) => self.clipboard.set_image(i),
+            SavedClip::Text(t) => private_set(&mut self.clipboard).text(t),
+            SavedClip::Image(i) => private_set(&mut self.clipboard).image(i),
             SavedClip::Empty => self.clipboard.clear(),
         };
     }
     fn get_text(&mut self) -> Option<String> { self.clipboard.get_text().ok() }
-    fn set_text(&mut self, t: &str) { let _ = self.clipboard.set_text(t); }
+    fn set_text(&mut self, t: &str) { let _ = private_set(&mut self.clipboard).text(t); }
 }
 
 impl KeySender for Io {
