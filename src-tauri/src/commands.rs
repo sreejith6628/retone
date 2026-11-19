@@ -128,7 +128,7 @@ pub fn finish_first_run(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn has_api_key(state: State<'_, AppState>, key: String) -> bool {
-    state.secrets.get(&key).map(|k| !k.is_empty()).unwrap_or(false)
+    provider_id(&key).is_ok() && state.secrets.get(&key).map(|k| !k.is_empty()).unwrap_or(false)
 }
 
 #[tauri::command]
@@ -140,7 +140,10 @@ pub fn set_api_key(state: State<'_, AppState>, key: String, value: String) -> Re
 }
 
 #[tauri::command]
-pub fn delete_api_key(state: State<'_, AppState>, key: String) -> Result<(), String> { state.secrets.delete(&key) }
+pub fn delete_api_key(state: State<'_, AppState>, key: String) -> Result<(), String> {
+    provider_id(&key)?;
+    state.secrets.delete(&key)
+}
 
 /// Open a terminal running the tool's own sign-in. Retone never sees the password.
 #[tauri::command]
