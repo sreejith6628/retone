@@ -46,6 +46,10 @@
     ],
     "shortDescription": "Rewrite selected text anywhere with your own AI subscription",
     "category": "Productivity",
-    "copyright": "Copyright (c) 2026 Sreejith"
+    "copyright": "Copyright (c) 2026 Sreejith",
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "11.0"
+    }
   }
 }

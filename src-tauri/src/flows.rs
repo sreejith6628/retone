@@ -27,12 +27,22 @@ const STILL_WORKING: &str = "Still working…";
 
 fn options_open(app: &AppHandle) -> bool { app.get_webview_window(winmgr::OPTIONS).is_some() }
 
+/// macOS: without Accessibility permission the ⌘C would silently do nothing. Say so instead of
+/// "nothing selected", and bring up the system prompt / settings pane. Always true on Windows.
+fn accessibility_ok(app: &AppHandle) -> bool {
+    if platform::accessibility_trusted() { return true; }
+    platform::open_accessibility_settings();
+    set_status(app, PillStatus::Error("Allow Retone under Accessibility, then try again".into()));
+    false
+}
+
 /// Select text → press shortcut / click pill → polished in place with the default tone.
 pub fn quick_polish(app: AppHandle) {
     if options_open(&app) {
         winmgr::focus_options(&app);
         return;
     }
+    if !accessibility_ok(&app) { return; }
     let target = platform::current_target();
     tauri::async_runtime::spawn(async move {
         let st = app.state::<AppState>();
@@ -55,6 +65,7 @@ pub fn open_options(app: AppHandle) {
         winmgr::focus_options(&app);
         return;
     }
+    if !accessibility_ok(&app) { return; }
     let target = platform::current_target();
     tauri::async_runtime::spawn(async move {
         let st = app.state::<AppState>();

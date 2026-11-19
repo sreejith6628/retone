@@ -15,22 +15,34 @@ pub use self::macos::*;
 /// Real clipboard + keyboard, implementing the core capture traits.
 pub struct Io {
     clipboard: arboard::Clipboard,
-    keys: enigo::Enigo,
+    /// Not used on macOS (keys go through CGEvent), where it would fail without Accessibility.
+    keys: Option<enigo::Enigo>,
 }
 
 impl Io {
     pub fn new() -> Option<Io> {
         let clipboard = arboard::Clipboard::new().ok()?;
-        let keys = enigo::Enigo::new(&enigo::Settings::default()).ok()?;
+        let keys = if cfg!(target_os = "macos") { None }
+                   else { Some(enigo::Enigo::new(&enigo::Settings::default()).ok()?) };
         Some(Io { clipboard, keys })
     }
 
+    /// Ctrl+<c> on Windows; ⌘<c> on macOS (posted as CGEvents with an explicit Command flag,
+    /// which is safe off the main thread and ignores any modifier the user is still holding).
     fn chord(&mut self, c: char) {
-        use enigo::{Direction::*, Key, Keyboard};
-        let modifier = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };
-        let _ = self.keys.key(modifier, Press);
-        let _ = self.keys.key(Key::Unicode(c), Click);
-        let _ = self.keys.key(modifier, Release);
+        #[cfg(target_os = "macos")]
+        {
+            let _ = &self.keys;
+            command_chord(c);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            use enigo::{Direction::*, Key, Keyboard};
+            let Some(keys) = self.keys.as_mut() else { return };
+            let _ = keys.key(Key::Control, Press);
+            let _ = keys.key(Key::Unicode(c), Click);
+            let _ = keys.key(Key::Control, Release);
+        }
     }
 }
 

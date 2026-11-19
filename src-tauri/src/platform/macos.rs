@@ -60,21 +60,85 @@ pub(super) fn modifiers_held() -> bool {
     unsafe { CGEventSourceFlagsState(0) & mask != 0 }
 }
 
+// --- Accessibility (needed to post ⌘C / ⌘V into other apps) ---------------------------------
+
+type CFTypeRef = *const std::ffi::c_void;
+
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> u8; // C `Boolean`
+    fn AXIsProcessTrustedWithOptions(options: CFTypeRef) -> u8;
+    static kAXTrustedCheckOptionPrompt: CFTypeRef;
+}
+
+#[link(name = "CoreFoundation", kind = "framework")]
+unsafe extern "C" {
+    static kCFBooleanTrue: CFTypeRef;
+    static kCFTypeDictionaryKeyCallBacks: u8;
+    static kCFTypeDictionaryValueCallBacks: u8;
+    fn CFDictionaryCreate(alloc: CFTypeRef, keys: *const CFTypeRef, values: *const CFTypeRef, n: isize,
+                          key_cb: *const u8, value_cb: *const u8) -> CFTypeRef;
+    fn CFRelease(cf: CFTypeRef);
 }
 
 pub fn accessibility_trusted() -> bool { unsafe { AXIsProcessTrusted() != 0 } }
 
+/// Ask macOS to show its "Retone would like to control this computer" prompt. This also adds
+/// Retone to the Accessibility list (switched off), so the user only has to flip the switch.
+pub fn request_accessibility() -> bool {
+    unsafe {
+        let keys = [kAXTrustedCheckOptionPrompt];
+        let values = [kCFBooleanTrue];
+        let dict = CFDictionaryCreate(std::ptr::null(), keys.as_ptr(), values.as_ptr(), 1,
+                                      &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        if dict.is_null() { return accessibility_trusted(); }
+        let ok = AXIsProcessTrustedWithOptions(dict) != 0;
+        CFRelease(dict);
+        ok
+    }
+}
+
 pub fn open_accessibility_settings() {
+    if request_accessibility() { return; }
     let _ = std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility").status();
 }
 
-/// Track the last frontmost app that isn't Retone (clicking the pill activates Retone on macOS).
+// --- ⌘C / ⌘V ---------------------------------------------------------------------------------
+
+#[link(name = "CoreGraphics", kind = "framework")]
+unsafe extern "C" {
+    fn CGEventSourceCreate(state_id: i32) -> CFTypeRef;
+    fn CGEventCreateKeyboardEvent(source: CFTypeRef, keycode: u16, key_down: bool) -> CFTypeRef;
+    fn CGEventSetFlags(event: CFTypeRef, flags: u64);
+    fn CGEventPost(tap: u32, event: CFTypeRef);
+}
+
+const CG_EVENT_FLAG_COMMAND: u64 = 0x100000;
+const CG_SESSION_EVENT_TAP: u32 = 1; // kCGSessionEventTap
+const CG_STATE_COMBINED_SESSION: i32 = 0; // kCGEventSourceStateCombinedSessionState
+
+/// Post ⌘+key. Uses ANSI virtual key codes (so it never touches the keyboard-layout APIs,
+/// which must run on the main thread); `c`/`v` are the only keys Retone sends.
+pub(super) fn command_chord(c: char) {
+    let keycode: u16 = match c { 'c' => 0x08, 'v' => 0x09, _ => return }; // kVK_ANSI_C / kVK_ANSI_V
+    unsafe {
+        let source = CGEventSourceCreate(CG_STATE_COMBINED_SESSION);
+        for down in [true, false] {
+            let ev = CGEventCreateKeyboardEvent(source, keycode, down);
+            if ev.is_null() { continue; }
+            CGEventSetFlags(ev, CG_EVENT_FLAG_COMMAND);
+            CGEventPost(CG_SESSION_EVENT_TAP, ev);
+            CFRelease(ev);
+            std::thread::sleep(Duration::from_millis(15));
+        }
+        if !source.is_null() { CFRelease(source); }
+    }
+}
+
 pub fn install_hook() {}
 
+/// Track the last frontmost app that isn't Retone (clicking the pill activates Retone on macOS).
 pub fn install_pill(_pill: isize, _events: mpsc::Sender<PillEvent>, _reinstall_on_ui: impl Fn() + Send + 'static) {
     std::thread::spawn(|| loop {
         if let Some(p) = frontmost_pid() { if p != own_pid() { LAST_EXTERNAL_PID.store(p, SeqCst); } }
