@@ -18,7 +18,7 @@ pub fn current_target() -> Option<Target> {
     (!h.is_null()).then(|| Target(h as isize))
 }
 
-pub(super) fn before_copy(_t: &Target) {}
+pub(super) fn before_copy(_t: &Target) -> bool { true }
 
 fn hwnd(t: &Target) -> HWND { t.0 as HWND }
 
@@ -83,6 +83,7 @@ pub(super) fn modifiers_held() -> bool {
 
 pub fn accessibility_trusted() -> bool { true }
 pub fn open_accessibility_settings() {}
+pub fn request_accessibility() -> bool { true }
 
 // ---------- Pill: display-only webview + WH_MOUSE_LL hook (see docs/spike-notes.md) ----------
 

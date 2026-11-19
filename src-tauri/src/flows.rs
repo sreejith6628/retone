@@ -28,11 +28,12 @@ const STILL_WORKING: &str = "Still working…";
 fn options_open(app: &AppHandle) -> bool { app.get_webview_window(winmgr::OPTIONS).is_some() }
 
 /// macOS: without Accessibility permission the ⌘C would silently do nothing. Say so instead of
-/// "nothing selected", and bring up the system prompt / settings pane. Always true on Windows.
+/// "nothing selected", and show the system prompt (it lists Retone in Accessibility settings).
+/// Always true on Windows.
 fn accessibility_ok(app: &AppHandle) -> bool {
     if platform::accessibility_trusted() { return true; }
-    platform::open_accessibility_settings();
-    set_status(app, PillStatus::Error("Allow Retone under Accessibility, then try again".into()));
+    platform::request_accessibility();
+    set_status(app, PillStatus::Error("Allow Retone under Accessibility (System Settings), then try again".into()));
     false
 }
 

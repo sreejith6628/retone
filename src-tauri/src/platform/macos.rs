@@ -47,7 +47,9 @@ pub fn reactivate(t: &Target) -> bool {
 
 pub fn force_foreground(_window: isize) {}
 
-pub(super) fn before_copy(t: &Target) { let _ = reactivate(t); }
+/// Never copy from whatever happens to be in front if the source app could not be brought back:
+/// that could send text from a different app to the AI.
+pub(super) fn before_copy(t: &Target) -> bool { reactivate(t) }
 
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
@@ -98,10 +100,11 @@ pub fn request_accessibility() -> bool {
     }
 }
 
+/// Opens System Settings → Privacy & Security → Accessibility (from the Settings button).
 pub fn open_accessibility_settings() {
-    if request_accessibility() { return; }
+    let _ = request_accessibility(); // makes sure Retone is listed there
     let _ = std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility").status();
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility").spawn();
 }
 
 // --- ⌘C / ⌘V ---------------------------------------------------------------------------------

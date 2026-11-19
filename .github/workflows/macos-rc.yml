@@ -6,6 +6,9 @@ on:
     branches: ["macos-support", "rc/**"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   dmg:
     runs-on: macos-latest

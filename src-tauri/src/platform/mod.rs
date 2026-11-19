@@ -50,8 +50,10 @@ impl Io {
 pub enum SavedClip { Empty, Text(String), Image(arboard::ImageData<'static>) }
 
 /// Everything Retone itself puts on the clipboard (the copy sentinel, the result being pasted,
-/// the user's own clipboard being put back) is kept out of clipboard history and cloud sync, so
-/// drafts and results don't pile up in Win+V / clipboard managers or leave the machine.
+/// the user's own clipboard being put back) is flagged as private. Windows: excluded from Win+V
+/// history and cloud clipboard. macOS: marked `org.nspasteboard.ConcealedType`, which clipboard
+/// managers that follow the convention skip; it does not stop Universal Clipboard/Handoff.
+/// The selection itself is copied by the target app (simulated Ctrl+C/⌘C) and can't be flagged.
 fn private_set(cb: &mut arboard::Clipboard) -> arboard::Set<'_> {
     #[cfg(windows)]
     { use arboard::SetExtWindows; cb.set().exclude_from_monitoring() }
@@ -93,7 +95,7 @@ impl KeySender for Io {
 
 /// Copy the selection from `target` (switching back to it first where the platform needs that).
 pub fn copy_from(target: Option<&Target>) -> Option<String> {
-    if let Some(t) = target { before_copy(t); }
+    if let Some(t) = target { if !before_copy(t) { return None; } }
     let mut io = Io::new()?;
     retone_core::capture::copy_selection(&mut io)
 }

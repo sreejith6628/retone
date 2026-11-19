@@ -19,11 +19,11 @@ Run on a real Mac before calling a macOS build "working". Note the macOS version
 
 ## 2. Accessibility permission
 - [ ] Settings shows "Accessibility: not allowed" with an **Open System Settings** button.
-- [ ] Click it → macOS shows the "Retone would like to control this computer" prompt and/or opens **Privacy & Security → Accessibility**. Retone is listed there.
+- [ ] Click it → **Privacy & Security → Accessibility** opens (macOS may also show its "would like to control this computer" prompt). Retone is listed there.
 - [ ] Turn Retone **on**. Back in Retone Settings, click **Re-check** → shows "allowed".
       (If it still says not allowed, quit Retone from the menu bar and reopen it.)
 - [ ] With permission turned **off**, press ⌥⌘P with text selected → the pill shows
-      "Allow Retone under Accessibility…" (not "nothing selected"). Turn it back on.
+      "Allow Retone under Accessibility…" (not "nothing selected") and macOS shows its permission prompt. Turn it back on.
 
 ## 3. Provider
 - [ ] Pick a provider you have (Claude Code / Codex / Gemini CLI signed in, or an API key) → **Test** passes.
@@ -48,11 +48,18 @@ For each: select a clumsy sentence → press ⌥⌘P →
 - [ ] Click the menu-bar icon → same menu opens; **Show/hide floating button** toggles the pill; **Quit Retone** quits.
 - [ ] Drag the pill somewhere else; quit and relaunch → it stays where you put it.
 
+## 6b. Sign in from Retone
+- [ ] Settings → AI providers → **Sign in…** for a CLI provider → macOS asks to let Retone control **Terminal** → Allow → a Terminal window opens with the provider's login command.
+
 ## 7. Shortcuts
 - [ ] Change a shortcut in Settings (e.g. ⌃⌥P) → the new one works and the old one doesn't.
 - [ ] If ⌥⌘P clashes with an app you use, note which app.
 
-## 8. Other
+## 8. Privacy checks
+- [ ] If you use a clipboard manager (Raycast, Maccy, Paste…): after a polish, the rewrite and your restored clipboard should **not** appear as new history entries (the selection Retone copied may).
+- [ ] If you test the Gemini CLI provider: after a polish, `ls ~/.gemini/tmp ~/.gemini/history` shows no `retone-…` folder.
+
+## 9. Other
 - [ ] Non-English keyboard layout (if you use one): ⌥⌘P still copies/pastes correctly. (Known limit: Retone sends the physical C/V keys.)
 - [ ] Launch at login (if enabled in Settings) works after a restart.
 - [ ] Log file location if anything fails: `~/Library/Logs/app.retone.desktop/` — attach it to the report.
